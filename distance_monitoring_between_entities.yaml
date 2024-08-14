@@ -1,0 +1,67 @@
+blueprint:
+  name: Distance Monitoring Between Entities
+  description: Monitors the distance between multiple entities and triggers actions when the distance exceeds a specified threshold.
+  domain: automation
+  input:
+    threshold:
+      name: Distance threshold (km)
+      description: The distance threshold between entities. Actions will be triggered if the distance between any pair of entities exceeds this value.
+      default: 2.0
+      selector:
+        number:
+          min: 1.0
+          max: 10.0
+          unit_of_measurement: "km"
+          mode: slider
+          step: 1.0
+
+    entities:
+      name: Entities to Monitor
+      description: List of device_trackers to monitor the distance between them.
+      selector:
+        entity:
+          domain: device_tracker
+          multiple: true
+
+    actions:
+      name: Actions
+      description: Actions to perform when the distance between any two entities exceeds the threshold.
+      selector:
+        action: {}
+
+variables:
+  threshold: !input threshold
+  entities: !input entities
+
+trigger:
+  - platform: state
+    entity_id: !input entities
+
+condition: []
+
+action:
+  - variables:
+      distances_exceeded: |
+        {% set exceeded = [] %}
+        {% for i in range(entities | length) %}
+          {% for j in range(i + 1, entities | length) %}
+            {% set entity1 = entities[i] %}
+            {% set entity2 = entities[j] %}
+            {% set entity1_location = states(entity1) %}
+            {% set entity2_location = states(entity2) %}
+            {% if entity1_location is not none and entity2_location is not none %}
+              {% set distance = distance(entity1, entity2) %}
+              {% if distance is not none and distance > threshold %}
+                {% set exceeded = exceeded + ['Entities: ' ~ entity1 ~ ' and ' ~ entity2 ~ ' - Distance: ' ~ distance | round(2) ~ ' km'] %}
+              {% endif %}
+            {% endif %}
+          {% endfor %}
+        {% endfor %}
+        {{ exceeded }}
+
+  - choose:
+      - conditions:
+          - condition: template
+            value_template: "{{ distances_exceeded | length > 0 }}"
+        sequence: !input actions
+    default: []
